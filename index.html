@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Hesap Defterim — Gelir Gider Takibi</title>
+
+<!-- iPhone'da "Ana Ekrana Ekle" ile tam uygulama gibi açılması için -->
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Hesap Defterim">
+<meta name="theme-color" content="#1F3A2E">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,600;0,700;1,500&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<style>
+  :root{
+    --paper:#F6F1E4;
+    --paper-dim:#EFE8D6;
+    --ink:#22281F;
+    --ink-soft:#5C6152;
+    --ledger:#1F3A2E;
+    --ledger-light:#2F5544;
+    --gold:#B08D57;
+    --income:#2F7A50;
+    --income-bg:#E4F0E3;
+    --expense:#B4472F;
+    --expense-bg:#F5E4DE;
+    --line:#D9CFB4;
+    --shadow: 0 6px 18px rgba(34,40,31,0.10);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    -webkit-font-smoothing:antialiased;
+    padding-bottom:90px;
+    background-image:
+      linear-gradient(var(--paper) 0%, var(--paper) 100%);
+  }
+  .mono{font-family:'IBM Plex Mono',monospace;}
+
+  /* Header */
+  header.app{
+    background:var(--ledger);
+    color:var(--paper);
+    padding:22px 18px 26px;
+    border-bottom:4px solid var(--gold);
+    position:relative;
+    overflow:hidden;
+  }
+  header.app::after{
+    content:"";
+    position:absolute;
+    right:-40px;top:-40px;
+    width:160px;height:160px;
+    border-radius:50%;
+    background:radial-gradient(circle, rgba(176,141,87,0.25) 0%, transparent 70%);
+  }
+  header.app h1{
+    font-family:'Lora',serif;
+    font-weight:700;
+    font-size:1.5rem;
+    margin:0 0 2px;
+    letter-spacing:0.2px;
+  }
+  header.app .eyebrow{
+    font-size:0.72rem;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    color:var(--gold);
+    font-weight:600;
+  }
+  .balance-row{
+    display:flex;
+    gap:10px;
+    margin-top:18px;
+  }
+  .balance-card{
+    flex:1;
+    background:rgba(255,255,255,0.06);
+    border:1px solid rgba(255,255,255,0.14);
+    border-radius:10px;
+    padding:10px 12px;
+  }
+  .balance-card .lbl{
+    font-size:0.68rem;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    color:rgba(246,241,228,0.65);
+    margin-bottom:4px;
+  }
+  .balance-card .val{
+    font-family:'IBM Plex Mono',monospace;
+    font-weight:600;
+    font-size:1.02rem;
+  }
+  .balance-card.income .val{color:#8FD7A8;}
+  .balance-card.expense .val{color:#F0A98D;}
+  .balance-card.net .val{color:#F6F1E4;}
+
+  /* Tabs */
+  nav.tabs{
+    display:flex;
+    background:var(--paper-dim);
+    border-bottom:1px solid var(--line);
+    position:sticky;
+    top:0;
+    z-index:20;
+  }
+  nav.tabs button{
+    flex:1;
+    border:none;
+    background:transparent;
+    padding:12px 4px;
+    font-family:'Inter',sans-serif;
+    font-size:0.78rem;
+    font-weight:600;
+    color:var(--ink-soft);
+    cursor:pointer;
+    border-bottom:3px solid transparent;
+    transition:.15s;
+  }
+  nav.tabs button.active{
+    color:var(--ledger);
+    border-bottom-color:var(--gold);
+  }
+
+  main{padding:16px;max-width:640px;margin:0 auto;}
+  .view{display:none;}
+  .view.active{display:block;}
+
+  .section-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin:4px 0 14px;
+  }
+  .section-head h2{
+    font-family:'Lora',serif;
+    font-size:1.15rem;
+    margin:0;
+    color:var(--ledger);
+  }
+  .add-btn{
+    background:var(--ledger);
+    color:var(--paper);
+    border:none;
+    border-radius:20px;
+    padding:8px 16px;
+    font-size:0.82rem;
+    font-weight:600;
+    cursor:pointer;
+    box-shadow:var(--shadow);
+  }
+  .add-btn.gider{background:var(--expense);}
+
+  /* Entry stub card */
+  .entry{
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:12px 14px;
+    margin-bottom:10px;
+    display:flex;
+    align-items:center;
+    gap:12px;
+    position:relative;
+    box-shadow:var(--shadow);
+    border-left:5px solid var(--income);
+  }
+  .entry.gider{border-left-color:var(--expense);}
+  .entry .info{flex:1;min-width:0;}
+  .entry .kategori{
+    font-weight:600;
+    font-size:0.92rem;
+    color:var(--ink);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .entry .aciklama{
+    font-size:0.8rem;
+    color:var(--ink-soft);
+    margin-top:1px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .entry .tarih{
+    font-size:0.7rem;
+    color:var(--ink-soft);
+    margin-top:4px;
+    font-family:'IBM Plex Mono',monospace;
+    letter-spacing:0.01em;
+  }
+  .entry .tutar{
+    font-family:'IBM Plex Mono',monospace;
+    font-weight:600;
+    font-size:0.95rem;
+    color:var(--income);
+    white-space:nowrap;
+  }
+  .entry.gider .tutar{color:var(--expense);}
+  .entry .actions{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+  }
+  .icon-btn{
+    border:none;
+    background:var(--paper-dim);
+    width:28px;height:28px;
+    border-radius:7px;
+    cursor:pointer;
+    font-size:0.8rem;
+    display:flex;align-items:center;justify-content:center;
+    color:var(--ink-soft);
+  }
+  .icon-btn:active{background:var(--line);}
+
+  .empty{
+    text-align:center;
+    color:var(--ink-soft);
+    padding:40px 10px;
+    font-size:0.88rem;
+    border:1px dashed var(--line);
+    border-radius:10px;
+  }
+
+  /* Chart view */
+  .chart-card{
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:16px;
+    margin-bottom:16px;
+    box-shadow:var(--shadow);
+  }
+  .chart-card h3{
+    font-family:'Lora',serif;
+    font-size:1rem;
+    margin:0 0 10px;
+    color:var(--ledger);
+    text-align:center;
+  }
+  .chart-wrap{position:relative;height:230px;}
+  .legend-note{
+    text-align:center;
+    font-size:0.75rem;
+    color:var(--ink-soft);
+    margin-top:8px;
+  }
+
+  /* Backup view */
+  .backup-card{
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:18px;
+    margin-bottom:14px;
+    box-shadow:var(--shadow);
+  }
+  .backup-card h3{
+    font-family:'Lora',serif;
+    font-size:1rem;
+    margin:0 0 6px;
+    color:var(--ledger);
+  }
+  .backup-card p{
+    font-size:0.82rem;
+    color:var(--ink-soft);
+    margin:0 0 12px;
+    line-height:1.4;
+  }
+  .wide-btn{
+    display:block;
+    width:100%;
+    padding:12px;
+    border-radius:9px;
+    border:none;
+    font-weight:600;
+    font-size:0.88rem;
+    cursor:pointer;
+    text-align:center;
+  }
+  .wide-btn.primary{background:var(--ledger);color:var(--paper);}
+  .wide-btn.gold{background:var(--gold);color:#2a2110;}
+  .wide-btn.outline{background:transparent;border:1.5px solid var(--ledger);color:var(--ledger);}
+  input[type="file"]{display:none;}
+
+  /* Modal */
+  .overlay{
+    display:none;
+    position:fixed;inset:0;
+    background:rgba(20,24,17,0.5);
+    z-index:50;
+    align-items:flex-end;
+  }
+  .overlay.active{display:flex;}
+  .modal{
+    background:var(--paper);
+    width:100%;
+    border-radius:18px 18px 0 0;
+    padding:20px 18px calc(20px + env(safe-area-inset-bottom));
+    max-height:88vh;
+    overflow-y:auto;
+    border-top:4px solid var(--gold);
+  }
+  .modal h3{
+    font-family:'Lora',serif;
+    color:var(--ledger);
+    margin:0 0 14px;
+    font-size:1.1rem;
+  }
+  .field{margin-bottom:12px;}
+  .field label{
+    display:block;
+    font-size:0.75rem;
+    font-weight:600;
+    color:var(--ink-soft);
+    text-transform:uppercase;
+    letter-spacing:0.05em;
+    margin-bottom:5px;
+  }
+  .field input, .field select{
+    width:100%;
+    padding:11px 12px;
+    border-radius:8px;
+    border:1.5px solid var(--line);
+    background:#fff;
+    font-size:0.95rem;
+    font-family:'Inter',sans-serif;
+    color:var(--ink);
+  }
+  .field input:focus, .field select:focus{outline:2px solid var(--gold);border-color:var(--gold);}
+  .type-toggle{display:flex;gap:8px;}
+  .type-toggle button{
+    flex:1;
+    padding:10px;
+    border-radius:8px;
+    border:1.5px solid var(--line);
+    background:#fff;
+    font-weight:600;
+    font-size:0.85rem;
+    cursor:pointer;
+    color:var(--ink-soft);
+  }
+  .type-toggle button.sel-income{border-color:var(--income);color:var(--income);background:var(--income-bg);}
+  .type-toggle button.sel-expense{border-color:var(--expense);color:var(--expense);background:var(--expense-bg);}
+  .modal-actions{display:flex;gap:10px;margin-top:16px;}
+  .modal-actions button{flex:1;}
+  .cancel-btn{
+    background:transparent;
+    border:1.5px solid var(--line);
+    color:var(--ink-soft);
+    padding:12px;
+    border-radius:9px;
+    font-weight:600;
+    cursor:pointer;
+  }
+
+  /* toast */
+  #toast{
+    position:fixed;
+    bottom:18px;left:50%;
+    transform:translateX(-50%) translateY(20px);
+    background:var(--ledger);
+    color:var(--paper);
+    padding:10px 18px;
+    border-radius:24px;
+    font-size:0.82rem;
+    opacity:0;
+    transition:.25s;
+    z-index:100;
+    box-shadow:var(--shadow);
+    white-space:nowrap;
+  }
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  /* hidden PDF report container */
+  #pdf-report{
+    position:fixed;
+    left:-9999px;
+    top:0;
+    width:760px;
+    background:#fff;
+    color:#1a1a1a;
+    font-family:'Inter',sans-serif;
+    padding:30px;
+  }
+  #pdf-report h1{font-family:'Lora',serif;font-size:22px;margin:0 0 2px;color:#1F3A2E;}
+  #pdf-report .sub{font-size:11px;color:#666;margin-bottom:18px;}
+  #pdf-report .totals{display:flex;gap:14px;margin-bottom:18px;}
+  #pdf-report .tbox{flex:1;border:1px solid #ddd;border-radius:8px;padding:10px 12px;}
+  #pdf-report .tbox .l{font-size:10px;text-transform:uppercase;color:#777;letter-spacing:0.05em;}
+  #pdf-report .tbox .v{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600;margin-top:3px;}
+  #pdf-report table{width:100%;border-collapse:collapse;margin-top:6px;}
+  #pdf-report th{
+    background:#1F3A2E;color:#fff;font-size:10.5px;text-align:left;
+    padding:7px 8px;text-transform:uppercase;letter-spacing:0.03em;
+  }
+  #pdf-report td{
+    font-size:11px;padding:6px 8px;border-bottom:1px solid #eee;
+  }
+  #pdf-report tr:nth-child(even) td{background:#faf8f2;}
+  #pdf-report .amt-in{color:#2F7A50;font-family:'IBM Plex Mono',monospace;font-weight:600;}
+  #pdf-report .amt-out{color:#B4472F;font-family:'IBM Plex Mono',monospace;font-weight:600;}
+  #pdf-report h2.sec{font-family:'Lora',serif;font-size:15px;color:#1F3A2E;margin:22px 0 8px;border-bottom:2px solid #B08D57;padding-bottom:4px;}
+</style>
+</head>
+<body>
+
+<header class="app">
+  <div class="eyebrow">Hesap Defterim</div>
+  <h1>Gelir &amp; Gider Takibi</h1>
+  <div class="balance-row">
+    <div class="balance-card income">
+      <div class="lbl">Toplam Gelir</div>
+      <div class="val" id="sum-income">₺0</div>
+    </div>
+    <div class="balance-card expense">
+      <div class="lbl">Toplam Gider</div>
+      <div class="val" id="sum-expense">₺0</div>
+    </div>
+    <div class="balance-card net">
+      <div class="lbl">Bakiye</div>
+      <div class="val" id="sum-net">₺0</div>
+    </div>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button class="tab-btn active" data-view="gelirler">Gelirler</button>
+  <button class="tab-btn" data-view="giderler">Giderler</button>
+  <button class="tab-btn" data-view="grafik">Grafik</button>
+  <button class="tab-btn" data-view="yedek">Yedekle</button>
+</nav>
+
+<main>
+
+  <section id="view-gelirler" class="view active">
+    <div class="section-head">
+      <h2>Gelirler</h2>
+      <button class="add-btn" onclick="openForm('gelir')">+ Gelir Ekle</button>
+    </div>
+    <div id="list-gelir"></div>
+  </section>
+
+  <section id="view-giderler" class="view">
+    <div class="section-head">
+      <h2>Giderler</h2>
+      <button class="add-btn gider" onclick="openForm('gider')">+ Gider Ekle</button>
+    </div>
+    <div id="list-gider"></div>
+  </section>
+
+  <section id="view-grafik" class="view">
+    <div class="chart-card">
+      <h3>Gelir / Gider Oranı</h3>
+      <div class="chart-wrap"><canvas id="chart-overall"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>Gelir Kategorileri</h3>
+      <div class="chart-wrap"><canvas id="chart-income"></canvas></div>
+      <div class="legend-note" id="note-income"></div>
+    </div>
+    <div class="chart-card">
+      <h3>Gider Kategorileri</h3>
+      <div class="chart-wrap"><canvas id="chart-expense"></canvas></div>
+      <div class="legend-note" id="note-expense"></div>
+    </div>
+  </section>
+
+  <section id="view-yedek" class="view">
+    <div class="backup-card">
+      <h3>JSON Yedeği İndir</h3>
+      <p>Tüm gelir ve gider kayıtlarınızı tek bir JSON dosyası olarak cihazınıza kaydedin.</p>
+      <button class="wide-btn primary" onclick="exportJSON()">JSON Olarak İndir</button>
+    </div>
+    <div class="backup-card">
+      <h3>JSON Yedeğini Yükle</h3>
+      <p>Daha önce indirdiğiniz bir JSON dosyasını seçerek kayıtları geri yükleyin.</p>
+      <label class="wide-btn outline" for="file-input" style="display:block;">Dosya Seç ve Yükle</label>
+      <input type="file" id="file-input" accept="application/json" onchange="importJSON(event)">
+    </div>
+    <div class="backup-card">
+      <h3>PDF Raporu</h3>
+      <p>Tüm kayıtların tarih, tür, kategori, açıklama ve tutarlarını içeren ayrıntılı raporu PDF olarak indirin.</p>
+      <button class="wide-btn gold" onclick="generatePDF()">PDF Raporu İndir</button>
+    </div>
+  </section>
+
+</main>
+
+<!-- Form Modal -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h3 id="form-title">Gelir Ekle</h3>
+    <input type="hidden" id="f-id">
+    <div class="field">
+      <label>Tür</label>
+      <div class="type-toggle">
+        <button type="button" id="btn-type-income" onclick="setFormType('gelir')">Gelir</button>
+        <button type="button" id="btn-type-expense" onclick="setFormType('gider')">Gider</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>Kategori</label>
+      <input list="cat-list" id="f-kategori" placeholder="Örn: Maaş, Market...">
+      <datalist id="cat-list"></datalist>
+    </div>
+    <div class="field">
+      <label>Açıklama</label>
+      <input type="text" id="f-aciklama" placeholder="Kısa açıklama (opsiyonel)">
+    </div>
+    <div class="field">
+      <label>Tutar (₺)</label>
+      <input type="number" id="f-tutar" inputmode="decimal" step="0.01" min="0" placeholder="0.00">
+    </div>
+    <div class="field">
+      <label>Tarih ve Saat</label>
+      <input type="datetime-local" id="f-tarih">
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="cancel-btn" onclick="closeForm()">Vazgeç</button>
+      <button type="button" class="add-btn" id="f-submit" style="flex:1;padding:12px;" onclick="submitForm()">Kaydet</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- hidden report used only for PDF generation -->
+<div id="pdf-report"></div>
+
+<script>
+/* ---------- State ---------- */
+const STORAGE_KEY = 'hesapDefterimKayitlari_v1';
+let records = loadRecords();
+let formType = 'gelir';
+
+const kategoriOnerileri = {
+  gelir: ['Maaş','Ek Gelir','Yatırım Geliri','Hediye','Diğer'],
+  gider: ['Market','Fatura','Kira','Ulaşım','Sağlık','Eğitim','Eğlence','Diğer']
+};
+
+function loadRecords(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  }catch(e){ return []; }
+}
+function saveRecords(){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+}
+function uid(){
+  return 'id_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8);
+}
+function formatTL(n){
+  return '₺' + Number(n).toLocaleString('tr-TR', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+function formatTarih(iso){
+  const d = new Date(iso);
+  return d.toLocaleString('tr-TR', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
+}
+function nowLocalInputValue(){
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0,16);
+}
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 1800);
+}
+
+/* ---------- Tabs ---------- */
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('view-'+btn.dataset.view).classList.add('active');
+    if(btn.dataset.view === 'grafik') renderCharts();
+  });
+});
+
+/* ---------- Render lists ---------- */
+function renderAll(){
+  renderList('gelir');
+  renderList('gider');
+  renderSummary();
+}
+
+function renderList(type){
+  const container = document.getElementById(type === 'gelir' ? 'list-gelir' : 'list-gider');
+  const items = records.filter(r=>r.type===type).sort((a,b)=> new Date(b.tarih) - new Date(a.tarih));
+  if(items.length === 0){
+    container.innerHTML = `<div class="empty">Henüz ${type==='gelir'?'gelir':'gider'} kaydı yok.</div>`;
+    return;
+  }
+  container.innerHTML = items.map(r => `
+    <div class="entry ${type==='gider'?'gider':''}">
+      <div class="info">
+        <div class="kategori">${escapeHtml(r.kategori || 'Kategori yok')}</div>
+        ${r.aciklama ? `<div class="aciklama">${escapeHtml(r.aciklama)}</div>` : ''}
+        <div class="tarih">${formatTarih(r.tarih)}</div>
+      </div>
+      <div class="tutar">${formatTL(r.tutar)}</div>
+      <div class="actions">
+        <button class="icon-btn" title="Düzenle" onclick="editRecord('${r.id}')">✎</button>
+        <button class="icon-btn" title="Sil" onclick="deleteRecord('${r.id}')">🗑</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderSummary(){
+  const totalIncome = records.filter(r=>r.type==='gelir').reduce((s,r)=>s+Number(r.tutar),0);
+  const totalExpense = records.filter(r=>r.type==='gider').reduce((s,r)=>s+Number(r.tutar),0);
+  document.getElementById('sum-income').textContent = formatTL(totalIncome);
+  document.getElementById('sum-expense').textContent = formatTL(totalExpense);
+  document.getElementById('sum-net').textContent = formatTL(totalIncome - totalExpense);
+}
+
+/* ---------- Form / Modal ---------- */
+function openForm(type, id=null){
+  formType = type;
+  document.getElementById('f-id').value = id || '';
+  document.getElementById('form-title').textContent = id ? 'Kaydı Düzenle' : (type==='gelir' ? 'Gelir Ekle' : 'Gider Ekle');
+
+  if(id){
+    const rec = records.find(r=>r.id===id);
+    formType = rec.type;
+    document.getElementById('f-kategori').value = rec.kategori || '';
+    document.getElementById('f-aciklama').value = rec.aciklama || '';
+    document.getElementById('f-tutar').value = rec.tutar;
+    const d = new Date(rec.tarih);
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    document.getElementById('f-tarih').value = d.toISOString().slice(0,16);
+  } else {
+    document.getElementById('f-kategori').value = '';
+    document.getElementById('f-aciklama').value = '';
+    document.getElementById('f-tutar').value = '';
+    document.getElementById('f-tarih').value = nowLocalInputValue();
+  }
+  setFormType(formType);
+  updateCategoryList();
+  document.getElementById('overlay').classList.add('active');
+}
+
+function setFormType(type){
+  formType = type;
+  document.getElementById('btn-type-income').classList.toggle('sel-income', type==='gelir');
+  document.getElementById('btn-type-expense').classList.toggle('sel-expense', type==='gider');
+  const submitBtn = document.getElementById('f-submit');
+  submitBtn.classList.toggle('gider', type==='gider');
+  updateCategoryList();
+}
+
+function updateCategoryList(){
+  const list = document.getElementById('cat-list');
+  list.innerHTML = kategoriOnerileri[formType].map(k=>`<option value="${k}">`).join('');
+}
+
+function closeForm(){
+  document.getElementById('overlay').classList.remove('active');
+}
+
+function submitForm(){
+  const id = document.getElementById('f-id').value;
+  const kategori = document.getElementById('f-kategori').value.trim();
+  const aciklama = document.getElementById('f-aciklama').value.trim();
+  const tutar = parseFloat(document.getElementById('f-tutar').value);
+  const tarihInput = document.getElementById('f-tarih').value;
+
+  if(!kategori){ showToast('Lütfen bir kategori girin.'); return; }
+  if(isNaN(tutar) || tutar <= 0){ showToast('Lütfen geçerli bir tutar girin.'); return; }
+  if(!tarihInput){ showToast('Lütfen tarih/saat girin.'); return; }
+
+  const tarihISO = new Date(tarihInput).toISOString();
+
+  if(id){
+    const rec = records.find(r=>r.id===id);
+    rec.type = formType; rec.kategori = kategori; rec.aciklama = aciklama;
+    rec.tutar = tutar; rec.tarih = tarihISO;
+    showToast('Kayıt güncellendi.');
+  } else {
+    records.push({
+      id: uid(), type: formType, kategori, aciklama, tutar, tarih: tarihISO, olusturulma: new Date().toISOString()
+    });
+    showToast(formType === 'gelir' ? 'Gelir eklendi.' : 'Gider eklendi.');
+  }
+  saveRecords();
+  renderAll();
+  closeForm();
+}
+
+function editRecord(id){
+  const rec = records.find(r=>r.id===id);
+  if(rec) openForm(rec.type, id);
+}
+
+function deleteRecord(id){
+  if(!confirm('Bu kaydı silmek istediğinize emin misiniz?')) return;
+  records = records.filter(r=>r.id!==id);
+  saveRecords();
+  renderAll();
+  showToast('Kayıt silindi.');
+}
+
+/* ---------- Charts ---------- */
+let chartOverall, chartIncome, chartExpense;
+const palette = ['#1F3A2E','#2F7A50','#B08D57','#B4472F','#5C6152','#8FBFA3','#D9A05B','#7A4B3A','#4A7A9E','#9E5A7A'];
+
+function groupBy(type){
+  const map = {};
+  records.filter(r=>r.type===type).forEach(r=>{
+    const k = r.kategori || 'Diğer';
+    map[k] = (map[k]||0) + Number(r.tutar);
+  });
+  return map;
+}
+
+function renderCharts(){
+  const totalIncome = records.filter(r=>r.type==='gelir').reduce((s,r)=>s+Number(r.tutar),0);
+  const totalExpense = records.filter(r=>r.type==='gider').reduce((s,r)=>s+Number(r.tutar),0);
+
+  if(chartOverall) chartOverall.destroy();
+  chartOverall = new Chart(document.getElementById('chart-overall'), {
+    type:'pie',
+    data:{
+      labels:['Gelir','Gider'],
+      datasets:[{data:[totalIncome, totalExpense], backgroundColor:['#2F7A50','#B4472F']}]
+    },
+    options:{plugins:{legend:{position:'bottom', labels:{font:{family:'Inter'}}}}, maintainAspectRatio:false}
+  });
+
+  const incomeMap = groupBy('gelir');
+  const incomeLabels = Object.keys(incomeMap);
+  if(chartIncome) chartIncome.destroy();
+  const noteIncome = document.getElementById('note-income');
+  if(incomeLabels.length===0){
+    noteIncome.textContent = 'Henüz gelir kaydı yok.';
+    document.getElementById('chart-income').getContext('2d').clearRect(0,0,9999,9999);
+  } else {
+    noteIncome.textContent = '';
+    chartIncome = new Chart(document.getElementById('chart-income'), {
+      type:'pie',
+      data:{labels:incomeLabels, datasets:[{data:Object.values(incomeMap), backgroundColor:palette}]},
+      options:{plugins:{legend:{position:'bottom', labels:{font:{family:'Inter'}, boxWidth:12}}}, maintainAspectRatio:false}
+    });
+  }
+
+  const expenseMap = groupBy('gider');
+  const expenseLabels = Object.keys(expenseMap);
+  if(chartExpense) chartExpense.destroy();
+  const noteExpense = document.getElementById('note-expense');
+  if(expenseLabels.length===0){
+    noteExpense.textContent = 'Henüz gider kaydı yok.';
+  } else {
+    noteExpense.textContent = '';
+    chartExpense = new Chart(document.getElementById('chart-expense'), {
+      type:'pie',
+      data:{labels:expenseLabels, datasets:[{data:Object.values(expenseMap), backgroundColor:palette}]},
+      options:{plugins:{legend:{position:'bottom', labels:{font:{family:'Inter'}, boxWidth:12}}}, maintainAspectRatio:false}
+    });
+  }
+}
+
+/* ---------- JSON Backup / Restore ---------- */
+function exportJSON(){
+  const data = JSON.stringify({exportedAt: new Date().toISOString(), records}, null, 2);
+  const blob = new Blob([data], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = new Date().toISOString().slice(0,10);
+  a.href = url;
+  a.download = `hesap-defteri-yedek-${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('JSON yedeği indirildi.');
+}
+
+function importJSON(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e=>{
+    try{
+      const parsed = JSON.parse(e.target.result);
+      const incoming = Array.isArray(parsed) ? parsed : parsed.records;
+      if(!Array.isArray(incoming)) throw new Error('Geçersiz format');
+      const replace = confirm('Mevcut kayıtların üzerine mi yazılsın?\n(Tamam = üzerine yaz, İptal = mevcutlarla birleştir)');
+      if(replace){
+        records = incoming;
+      } else {
+        const existingIds = new Set(records.map(r=>r.id));
+        incoming.forEach(r=>{
+          if(!r.id || existingIds.has(r.id)) r.id = uid();
+          records.push(r);
+        });
+      }
+      saveRecords();
+      renderAll();
+      showToast('Yedek başarıyla yüklendi.');
+    }catch(err){
+      alert('Dosya okunamadı. Lütfen geçerli bir JSON yedek dosyası seçin.');
+    }
+    event.target.value = '';
+  };
+  reader.readAsText(file);
+}
+
+/* ---------- PDF Report ---------- */
+async function generatePDF(){
+  if(records.length === 0){
+    showToast('Rapor oluşturmak için önce kayıt ekleyin.');
+    return;
+  }
+  showToast('PDF hazırlanıyor...');
+
+  const totalIncome = records.filter(r=>r.type==='gelir').reduce((s,r)=>s+Number(r.tutar),0);
+  const totalExpense = records.filter(r=>r.type==='gider').reduce((s,r)=>s+Number(r.tutar),0);
+  const sorted = [...records].sort((a,b)=> new Date(a.tarih) - new Date(b.tarih));
+
+  const rows = sorted.map(r=>`
+    <tr>
+      <td>${formatTarih(r.tarih)}</td>
+      <td>${r.type === 'gelir' ? 'Gelir' : 'Gider'}</td>
+      <td>${escapeHtml(r.kategori||'')}</td>
+      <td>${escapeHtml(r.aciklama||'')}</td>
+      <td class="${r.type==='gelir'?'amt-in':'amt-out'}" style="text-align:right;">${formatTL(r.tutar)}</td>
+    </tr>
+  `).join('');
+
+  const report = document.getElementById('pdf-report');
+  report.innerHTML = `
+    <h1>Gelir – Gider Raporu</h1>
+    <div class="sub">Oluşturulma tarihi: ${new Date().toLocaleString('tr-TR')} · Toplam kayıt: ${records.length}</div>
+    <div class="totals">
+      <div class="tbox"><div class="l">Toplam Gelir</div><div class="v" style="color:#2F7A50;">${formatTL(totalIncome)}</div></div>
+      <div class="tbox"><div class="l">Toplam Gider</div><div class="v" style="color:#B4472F;">${formatTL(totalExpense)}</div></div>
+      <div class="tbox"><div class="l">Bakiye</div><div class="v">${formatTL(totalIncome-totalExpense)}</div></div>
+    </div>
+    <h2 class="sec">Tüm Kayıtlar (Tarih Sırasına Göre)</h2>
+    <table>
+      <thead><tr><th>Tarih / Saat</th><th>Tür</th><th>Kategori</th><th>Açıklama</th><th style="text-align:right;">Tutar</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+
+  await new Promise(r=>setTimeout(r, 60));
+
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF('p','mm','a4');
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const margin = 8;
+
+  const canvas = await html2canvas(report, {scale:2, backgroundColor:'#ffffff'});
+  const imgWidth = pageWidth - margin*2;
+  const imgHeight = canvas.height * imgWidth / canvas.width;
+
+  let heightLeft = imgHeight;
+  let position = margin;
+  const imgData = canvas.toDataURL('image/png');
+
+  pdf.addImage(imgData, 'PNG', margin, position, imgWidth, imgHeight);
+  heightLeft -= (pageHeight - margin*2);
+
+  while(heightLeft > 0){
+    position = heightLeft - imgHeight + margin;
+    pdf.addPage();
+    pdf.addImage(imgData, 'PNG', margin, position, imgWidth, imgHeight);
+    heightLeft -= (pageHeight - margin*2);
+  }
+
+  const stamp = new Date().toISOString().slice(0,10);
+  pdf.save(`hesap-defteri-raporu-${stamp}.pdf`);
+  showToast('PDF indirildi.');
+}
+
+/* ---------- Init ---------- */
+renderAll();
+
+/* ---------- Service Worker (çevrimdışı çalışma için) ---------- */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
+</script>
+</body>
+</html>
